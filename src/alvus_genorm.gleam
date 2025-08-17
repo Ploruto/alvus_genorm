@@ -3,5 +3,5 @@ import alvus_genorm/generators/model_generator
 import gleam/io
 
 pub fn main() -> Nil {
-  model_generator.x()
+  model_generator.dev_example()
 }
