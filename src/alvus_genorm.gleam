@@ -1,6 +1,7 @@
 import alvus/core/app_spec.{type AppSpec}
+import alvus_genorm/generators/model_generator
 import gleam/io
 
 pub fn main() -> Nil {
-  io.println("Hello from alvus_genorm!")
+  model_generator.x()
 }
