@@ -33,7 +33,7 @@ pub fn dev_example() {
   echo get_model_type_field_names(d)
   echo codegen_model_type(d)
   echo codegen_model_fields(d)
-  io.print(codegen_partial_model_type(d))
+  echo codegen_partial_model_type(d)
   Nil
 }
 
@@ -130,8 +130,8 @@ fn codegen_model_type(model: schema.Model) -> String {
 /// For a `User` model with `id` and `full_name` fields, it generates:
 ///
 /// ```gleam
-/// pub type UserPartial {
-///   UserPartial(
+/// pub type PartialUser {
+///   PartialUser(
 ///     id: Option(String),
 ///     full_name: Option(String)
 ///   )
@@ -142,7 +142,7 @@ fn codegen_model_type(model: schema.Model) -> String {
 /// the partial type will be `Option(Option(...))`. For example, a nullable bio field
 /// would become `bio: Option(Option(String))` in the partial type.
 fn codegen_partial_model_type(model: schema.Model) -> String {
-  let type_name = get_model_type_name(model) <> "Partial"
+  let type_name = "Partial" <> get_model_type_name(model)
   let field_types_with_annotation =
     model.fields
     |> list.map(fn(field) {
