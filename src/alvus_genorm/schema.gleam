@@ -23,6 +23,7 @@ pub type FieldAttributes {
   Indexed
   AutoUUID
   ForeignKey
+  Nullable
 }
 
 pub type ValidationRule {

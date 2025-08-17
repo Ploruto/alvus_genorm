@@ -6,6 +6,7 @@ import alvus_genorm/generators/helpers/data_helpers.{
 }
 import alvus_genorm/schema.{type Field, type Model}
 import alvus_inflector/inflector
+import gleam/io
 import gleam/list
 import gleam/string
 
@@ -32,6 +33,7 @@ pub fn dev_example() {
   echo get_model_type_field_names(d)
   echo codegen_model_type(d)
   echo codegen_model_fields(d)
+  io.print(codegen_partial_model_type(d))
   Nil
 }
 
@@ -102,10 +104,53 @@ fn codegen_model_type(model: schema.Model) -> String {
     |> list.map(fn(field) {
       let field_name =
         field.column_name |> inflector.transform([inflector.Underscore])
-      let gleam_type_as_string =
-        field.field_type |> field_type_to_gleam_type_as_string
+      let gleam_type_as_string = field |> field_type_to_gleam_type_as_string
 
       "    " <> field_name <> ": " <> gleam_type_as_string
+    })
+
+  "pub type " <> type_name <> " {
+" <> "  " <> type_name <> "(
+" <> string.join(
+    field_types_with_annotation,
+    ",
+",
+  ) <> "
+" <> "  )
+" <> "}"
+}
+
+/// Generates the `pub type` definition for a partial model with optional fields.
+///
+/// This creates a Gleam type with a single constructor containing all the
+/// fields of the model wrapped in `Option(...)`. This is useful for partial
+/// updates or when some fields may not be present.
+/// ## Example
+///
+/// For a `User` model with `id` and `full_name` fields, it generates:
+///
+/// ```gleam
+/// pub type UserPartial {
+///   UserPartial(
+///     id: Option(String),
+///     full_name: Option(String)
+///   )
+/// }
+/// ```
+///
+/// Note: If a field is already nullable in the database (has `Nullable` attribute),
+/// the partial type will be `Option(Option(...))`. For example, a nullable bio field
+/// would become `bio: Option(Option(String))` in the partial type.
+fn codegen_partial_model_type(model: schema.Model) -> String {
+  let type_name = get_model_type_name(model) <> "Partial"
+  let field_types_with_annotation =
+    model.fields
+    |> list.map(fn(field) {
+      let field_name =
+        field.column_name |> inflector.transform([inflector.Underscore])
+      let gleam_type_as_string = field |> field_type_to_gleam_type_as_string
+
+      "    " <> field_name <> ": Option(" <> gleam_type_as_string <> ")"
     })
 
   "pub type " <> type_name <> " {
