@@ -1,3 +1,4 @@
+/// Refactored full query builder using query_helpers to demonstrate code reduction
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/int
@@ -6,13 +7,18 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 
+import alvus_genorm/query_helpers.{
+  type DatabaseError, type Direction, Asc, DatabaseConnectionError, Desc,
+  add_parameters_to_query, add_sql_condition, add_sql_condition_no_param,
+  build_complete_sql, build_limit_clause, build_order_clause, direction_to_sql,
+  execute_query_with_connection, finalize_sql_builder, new_sql_builder,
+  update_or_append_where_clause,
+}
 import pog
 
-pub type Error {
-  DatabaseConnectionError
-  QueryExecutionError
-  GenericError(String)
-}
+// Type aliases for cleaner imports
+pub type Error =
+  DatabaseError
 
 pub type UserField {
   UserId
@@ -32,11 +38,6 @@ pub type UserOrderClause {
   OrderByBio(Direction)
 }
 
-pub type Direction {
-  Asc
-  Desc
-}
-
 pub type UserWhereClause {
   WhereId(Int)
   WhereUsername(String)
@@ -52,7 +53,6 @@ pub type User {
 pub type UserQueryState {
   UserQueryState(
     where_clauses: List(UserWhereClause),
-    // relationships: List(String), // TODO: Add when implementing relationships
     order_by: List(UserOrderClause),
     limit: Option(Int),
   )
@@ -63,48 +63,52 @@ pub fn all() -> UserQuery {
   UserQuery(state: UserQueryState(where_clauses: [], order_by: [], limit: None))
 }
 
-/// Add a WHERE username = ? clause to the query  
+/// Add a WHERE username = ? clause to the query (replaces existing username clause)
 pub fn where_username(query: UserQuery, username: String) -> UserQuery {
-  let clauses = query.state.where_clauses
-  // check if where clause exists already in the query
-  let exists_already =
-    clauses
-    |> list.any(fn(clause) {
-      case clause {
-        WhereUsername(_) -> True
-        _ -> False
-      }
-    })
-
-  // now either replace or insert the clause:
-  let new_clauses = case exists_already {
-    True -> {
-      list.map(clauses, fn(c) {
-        case c {
-          WhereUsername(_) -> WhereUsername(username)
-          _ -> {
-            c
-          }
+  let new_clauses =
+    update_or_append_where_clause(
+      query.state.where_clauses,
+      fn(clause) {
+        case clause {
+          WhereUsername(_) -> True
+          _ -> False
         }
-      })
-    }
-    _ -> {
-      [WhereUsername(username), ..clauses]
-    }
-  }
+      },
+      WhereUsername(username),
+    )
 
   UserQuery(state: UserQueryState(..query.state, where_clauses: new_clauses))
 }
 
-/// Add a WHERE id = ? clause to the query
+/// Add a WHERE id = ? clause to the query (replaces existing id clause)
 pub fn where_id(query: UserQuery, id: Int) -> UserQuery {
-  let new_clauses = [WhereId(id), ..query.state.where_clauses]
+  let new_clauses =
+    update_or_append_where_clause(
+      query.state.where_clauses,
+      fn(clause) {
+        case clause {
+          WhereId(_) -> True
+          _ -> False
+        }
+      },
+      WhereId(id),
+    )
   UserQuery(state: UserQueryState(..query.state, where_clauses: new_clauses))
 }
 
-/// Add a WHERE bio = ? or bio IS NULL clause to the query
+/// Add a WHERE bio = ? or bio IS NULL clause to the query (replaces existing bio clause)
 pub fn where_bio(query: UserQuery, bio: Option(String)) -> UserQuery {
-  let new_clauses = [WhereBio(bio), ..query.state.where_clauses]
+  let new_clauses =
+    update_or_append_where_clause(
+      query.state.where_clauses,
+      fn(clause) {
+        case clause {
+          WhereBio(_) -> True
+          _ -> False
+        }
+      },
+      WhereBio(bio),
+    )
   UserQuery(state: UserQueryState(..query.state, where_clauses: new_clauses))
 }
 
@@ -128,6 +132,7 @@ pub fn limit(query: UserQuery, limit_value: Int) -> UserQuery {
   UserQuery(state: UserQueryState(..query.state, limit: Some(limit_value)))
 }
 
+// Model-specific helpers (still need to be generated per model)
 fn user_field_to_column_name(field: UserField) -> String {
   case field {
     UserId -> "id"
@@ -136,14 +141,6 @@ fn user_field_to_column_name(field: UserField) -> String {
   }
 }
 
-fn direction_to_sql(direction: Direction) -> String {
-  case direction {
-    Asc -> "ASC"
-    Desc -> "DESC"
-  }
-}
-
-// For full queries, always select all fields explicitly
 fn build_select_clause() -> String {
   let all_fields = [UserId, UserUsername, UserBio]
   let field_expressions =
@@ -155,49 +152,29 @@ fn build_select_clause() -> String {
 fn build_where_clause_sql_with_params(
   clauses: List(UserWhereClause),
 ) -> #(String, List(pog.Value)) {
-  let conditions_and_params =
+  let builder =
     clauses
-    |> list.fold(#([], [], 1), fn(acc, clause) {
-      let #(conditions, params, param_count) = acc
+    |> list.fold(new_sql_builder(), fn(builder, clause) {
       case clause {
         WhereId(value) -> {
-          let condition = "id = $" <> int.to_string(param_count)
-          #(
-            [condition, ..conditions],
-            [pog.int(value), ..params],
-            param_count + 1,
-          )
+          let condition = "id = $" <> int.to_string(builder.param_count)
+          add_sql_condition(builder, condition, pog.int(value))
         }
         WhereUsername(value) -> {
-          let condition = "username = $" <> int.to_string(param_count)
-          #(
-            [condition, ..conditions],
-            [pog.text(value), ..params],
-            param_count + 1,
-          )
+          let condition = "username = $" <> int.to_string(builder.param_count)
+          add_sql_condition(builder, condition, pog.text(value))
         }
         WhereBio(Some(value)) -> {
-          let condition = "bio = $" <> int.to_string(param_count)
-          #(
-            [condition, ..conditions],
-            [pog.text(value), ..params],
-            param_count + 1,
-          )
+          let condition = "bio = $" <> int.to_string(builder.param_count)
+          add_sql_condition(builder, condition, pog.text(value))
         }
         WhereBio(None) -> {
-          let condition = "bio IS NULL"
-          #([condition, ..conditions], params, param_count)
+          add_sql_condition_no_param(builder, "bio IS NULL")
         }
       }
     })
 
-  let #(conditions, params, _) = conditions_and_params
-  let where_clause =
-    conditions
-    |> list.reverse
-    |> string.join(" AND ")
-
-  #(where_clause, list.reverse(params))
+  finalize_sql_builder(builder)
 }
 
 fn build_order_clause_sql(clause: UserOrderClause) -> String {
@@ -216,10 +193,7 @@ fn build_complete_sql_query(
 
   let #(where_clause, parameters) = case query_state.where_clauses {
     [] -> #("", [])
-    clauses -> {
-      let #(conditions, params) = build_where_clause_sql_with_params(clauses)
-      #(" WHERE " <> conditions, params)
-    }
+    clauses -> build_where_clause_sql_with_params(clauses)
   }
 
   let order_clause = case query_state.order_by {
@@ -228,18 +202,20 @@ fn build_complete_sql_query(
       let order_conditions =
         clauses
         |> list.map(build_order_clause_sql)
-        |> string.join(", ")
-      " ORDER BY " <> order_conditions
+      build_order_clause(order_conditions)
     }
   }
 
-  let limit_clause = case query_state.limit {
-    None -> ""
-    Some(limit_value) -> " LIMIT " <> int.to_string(limit_value)
-  }
+  let limit_clause = build_limit_clause(query_state.limit)
 
   let sql =
-    select_clause <> from_clause <> where_clause <> order_clause <> limit_clause
+    build_complete_sql(
+      select_clause,
+      from_clause,
+      where_clause,
+      order_clause,
+      limit_clause,
+    )
   #(sql, parameters)
 }
 
@@ -260,37 +236,19 @@ pub fn execute(query: UserQuery) -> Result(List(User), Error) {
   let pog_query =
     pog.query(sql_query)
     |> pog.returning(user_decoder())
-
-  let final_query = case parameters {
-    [] -> pog_query
-    params -> {
-      params
-      |> list.fold(pog_query, fn(query_acc, param) {
-        pog.parameter(query_acc, param)
-      })
-    }
-  }
+    |> add_parameters_to_query(parameters)
 
   case start_database() {
-    Ok(db) -> {
-      case pog.execute(final_query, db) {
-        Ok(result) -> Ok(result.rows)
-        Error(error) -> {
-          io.println_error("Query execution failed")
-          echo error
-          Error(QueryExecutionError)
-        }
-      }
-    }
-    Error(_) -> {
-      Error(DatabaseConnectionError)
-    }
+    Ok(db) -> execute_query_with_connection(pog_query, db, "fetch users")
+    Error(err) -> Error(err)
   }
 }
 
 pub fn example_dev() {
   let query =
     all()
+    |> where_id(1)
+    |> where_id(2)
     // |> where_username("user1")
     // |> where_bio(Some("A programmer."))
     |> order_by(UserBio, Desc)
@@ -298,7 +256,7 @@ pub fn example_dev() {
 
   let #(sql_query, parameters) = build_complete_sql_query(query.state)
 
-  io.println("=== Generated Full SQL Query ===")
+  io.println("=== Generated Full SQL Query (Refactored) ===")
   io.println(sql_query)
   io.println("\n=== Parameters ===")
   parameters
@@ -310,7 +268,7 @@ pub fn example_dev() {
   io.println("Limit: " <> string.inspect(query.state.limit))
 
   // Execute the query
-  io.println("\n=== Attempting to execute full query ===")
+  io.println("\n=== Attempting to execute refactored query ===")
   let res = execute(query)
   case res {
     Ok(users) -> {
@@ -329,13 +287,13 @@ pub fn example_dev() {
     }
     Error(err) -> {
       io.println("\n=== Query Error ===")
-      echo err
+      io.println("Error: " <> string.inspect(err))
       Nil
     }
   }
 }
 
-pub fn start_database() {
+pub fn start_database() -> Result(pog.Connection, Error) {
   let pool_name = process.new_name("db_pool")
 
   let config =
@@ -347,12 +305,10 @@ pub fn start_database() {
     |> pog.password(None)
 
   case pog.start(config) {
-    Ok(started) -> {
-      Ok(started.data)
-    }
-    Error(error) -> {
+    Ok(started) -> Ok(started.data)
+    Error(_) -> {
       io.println_error("Failed to connect to database")
-      Error(error)
+      Error(DatabaseConnectionError)
     }
   }
 }
