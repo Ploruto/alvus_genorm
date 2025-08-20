@@ -27,6 +27,7 @@ pub type Field {
 /// Attributes that can be applied to database fields.
 /// These control database-level constraints and optimizations.
 pub type FieldAttributes {
+  PrimaryKey
   /// Ensures the field value is unique across all rows in the table
   Unique
   /// Creates a database index on this field for faster queries
