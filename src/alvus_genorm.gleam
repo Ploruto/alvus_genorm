@@ -1,9 +1,9 @@
 import alvus/core/app_spec.{type AppSpec}
 import alvus_genorm/generators/model_generator
-import alvus_genorm/generators/query_generators/partial
+import alvus_genorm/generators/query_generators/full
 import gleam/io
 
 pub fn main() -> Nil {
-  partial.example_dev()
+  full.example_dev()
   Nil
 }
