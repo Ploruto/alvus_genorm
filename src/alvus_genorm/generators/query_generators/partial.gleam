@@ -113,14 +113,6 @@ fn user_field_to_column_name(field: UserField) -> String {
   }
 }
 
-// fn partial_user_decoder() {
-//   {
-//     use id <- decode.field(0, decode.int)
-//     use username <- decode.field(1, decode.string)
-//     use bio <- decode.field(2, decode.optional(decode.string))
-//     decode.success(PartialUser(id:, username:, bio:))
-//   }
-// }
 pub type Selection(a) {
   Value(a)
   Null
@@ -146,7 +138,7 @@ fn decode_selected_field(
   }
 }
 
-fn user_decoder(selected_fields: List(UserField)) {
+fn partial_user_decoder(selected_fields: List(UserField)) {
   {
     use id <- decode_selected_field(UserId, selected_fields, 0, decode.int)
     use username <- decode_selected_field(
@@ -182,8 +174,8 @@ pub fn execute(query: PartialUserQuery) -> Result(List(PartialUser), Error) {
   echo query.state.where_clauses
 
   let q =
-    pog.query("select id, NULL as name, NULL as bio from users")
-    |> pog.returning(user_decoder(query.state.selected_fields))
+    pog.query("select id, NULL, NULL from users")
+    |> pog.returning(partial_user_decoder(query.state.selected_fields))
 
   case start_database() {
     Ok(db) -> {
@@ -214,15 +206,16 @@ pub fn example_dev() {
     Ok(users) -> {
       users
       |> list.each(fn(user) {
-        case user.id {
+        case user.bio {
           NotFetched -> {
             echo "value was not fetched"
           }
           Null -> {
             echo "value was null"
           }
-          Value(v) -> {
-            echo "value was " <> int.to_string(v)
+          Value(bio) -> {
+            echo bio
+            todo as "bio return"
           }
         }
       })
