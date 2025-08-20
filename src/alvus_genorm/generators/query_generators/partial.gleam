@@ -4,11 +4,15 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
 
-// import gleam/option.{type Option, None, Some}
 import pog
 
-pub type Error
+pub type Error {
+  DatabaseConnectionError
+  QueryExecutionError
+  GenericError(String)
+}
 
 pub type UserField {
   UserId
@@ -37,9 +41,6 @@ pub type UserWhereClause {
   WhereId(Int)
   WhereUsername(String)
   WhereBio(Option(String))
-  // WhereIdIn(List(Int))
-  // WhereUsernameIn(List(String))
-  // WhereBioIn(List(Option(String)))
 }
 
 pub type PartialUser {
@@ -70,8 +71,11 @@ pub fn select(fields: List(UserField)) -> PartialUserQuery {
   ))
 }
 
-// use the field_to_gleam_type to get the 2nd argument
-fn where_username(query: PartialUserQuery, username: String) -> PartialUserQuery {
+/// Add a WHERE username = ? clause to the query  
+pub fn where_username(
+  query: PartialUserQuery,
+  username: String,
+) -> PartialUserQuery {
   let clauses = query.state.where_clauses
   // check if where clause exists already in the query
   let exists_already =
@@ -105,12 +109,166 @@ fn where_username(query: PartialUserQuery, username: String) -> PartialUserQuery
   )
 }
 
+/// Add a WHERE id = ? clause to the query
+pub fn where_id(query: PartialUserQuery, id: Int) -> PartialUserQuery {
+  let new_clauses = [WhereId(id), ..query.state.where_clauses]
+  PartialUserQuery(
+    state: PartialUserQueryState(..query.state, where_clauses: new_clauses),
+  )
+}
+
+/// Add a WHERE bio = ? or bio IS NULL clause to the query
+pub fn where_bio(
+  query: PartialUserQuery,
+  bio: Option(String),
+) -> PartialUserQuery {
+  let new_clauses = [WhereBio(bio), ..query.state.where_clauses]
+  PartialUserQuery(
+    state: PartialUserQueryState(..query.state, where_clauses: new_clauses),
+  )
+}
+
+/// Add an ORDER BY clause to the query
+pub fn order_by(
+  query: PartialUserQuery,
+  field: UserField,
+  direction: Direction,
+) -> PartialUserQuery {
+  let order_clause = case field {
+    UserId -> OrderById(direction)
+    UserUsername -> OrderByUsername(direction)
+    UserBio -> OrderByBio(direction)
+  }
+  let new_order = [order_clause, ..query.state.order_by]
+  PartialUserQuery(
+    state: PartialUserQueryState(..query.state, order_by: new_order),
+  )
+}
+
+/// Add a LIMIT clause to the query
+pub fn limit(query: PartialUserQuery, limit_value: Int) -> PartialUserQuery {
+  PartialUserQuery(
+    state: PartialUserQueryState(..query.state, limit: Some(limit_value)),
+  )
+}
+
 fn user_field_to_column_name(field: UserField) -> String {
   case field {
     UserId -> "id"
     UserUsername -> "username"
     UserBio -> "bio"
   }
+}
+
+fn direction_to_sql(direction: Direction) -> String {
+  case direction {
+    Asc -> "ASC"
+    Desc -> "DESC"
+  }
+}
+
+fn build_select_clause(selected_fields: List(UserField)) -> String {
+  let all_fields = [UserId, UserUsername, UserBio]
+  let field_expressions =
+    all_fields
+    |> list.map(fn(field) {
+      case list.contains(selected_fields, field) {
+        True -> user_field_to_column_name(field)
+        False -> "NULL"
+      }
+    })
+  "SELECT " <> string.join(field_expressions, ", ")
+}
+
+fn build_where_clause_sql_with_params(
+  clauses: List(UserWhereClause),
+) -> #(String, List(pog.Value)) {
+  let conditions_and_params =
+    clauses
+    |> list.fold(#([], [], 1), fn(acc, clause) {
+      let #(conditions, params, param_count) = acc
+      case clause {
+        WhereId(value) -> {
+          let condition = "id = $" <> int.to_string(param_count)
+          #(
+            [condition, ..conditions],
+            [pog.int(value), ..params],
+            param_count + 1,
+          )
+        }
+        WhereUsername(value) -> {
+          let condition = "username = $" <> int.to_string(param_count)
+          #(
+            [condition, ..conditions],
+            [pog.text(value), ..params],
+            param_count + 1,
+          )
+        }
+        WhereBio(Some(value)) -> {
+          let condition = "bio = $" <> int.to_string(param_count)
+          #(
+            [condition, ..conditions],
+            [pog.text(value), ..params],
+            param_count + 1,
+          )
+        }
+        WhereBio(None) -> {
+          let condition = "bio IS NULL"
+          #([condition, ..conditions], params, param_count)
+        }
+      }
+    })
+
+  let #(conditions, params, _) = conditions_and_params
+  let where_clause =
+    conditions
+    |> list.reverse
+    |> string.join(" AND ")
+
+  #(where_clause, list.reverse(params))
+}
+
+fn build_order_clause_sql(clause: UserOrderClause) -> String {
+  case clause {
+    OrderById(direction) -> "id " <> direction_to_sql(direction)
+    OrderByUsername(direction) -> "username " <> direction_to_sql(direction)
+    OrderByBio(direction) -> "bio " <> direction_to_sql(direction)
+  }
+}
+
+fn build_complete_sql_query(
+  query_state: PartialUserQueryState,
+) -> #(String, List(pog.Value)) {
+  let select_clause = build_select_clause(query_state.selected_fields)
+  let from_clause = " FROM users"
+
+  let #(where_clause, parameters) = case query_state.where_clauses {
+    [] -> #("", [])
+    clauses -> {
+      let #(conditions, params) = build_where_clause_sql_with_params(clauses)
+      #(" WHERE " <> conditions, params)
+    }
+  }
+
+  let order_clause = case query_state.order_by {
+    [] -> ""
+    clauses -> {
+      let order_conditions =
+        clauses
+        |> list.map(build_order_clause_sql)
+        |> string.join(", ")
+      " ORDER BY " <> order_conditions
+    }
+  }
+
+  let limit_clause = case query_state.limit {
+    None -> ""
+    Some(limit_value) -> " LIMIT " <> int.to_string(limit_value)
+  }
+
+  let sql =
+    select_clause <> from_clause <> where_clause <> order_clause <> limit_clause
+  #(sql, parameters)
 }
 
 pub type Selection(a) {
@@ -159,69 +317,103 @@ fn partial_user_decoder(selected_fields: List(UserField)) {
 }
 
 pub fn execute(query: PartialUserQuery) -> Result(List(PartialUser), Error) {
-  let selected_fields_as_string =
-    query.state.selected_fields |> list.map(user_field_to_column_name)
+  let #(sql_query, parameters) = build_complete_sql_query(query.state)
 
-  let sql_select_fields =
-    ["id", "username", "bio"]
-    |> list.map(fn(column) {
-      case list.contains(selected_fields_as_string, column) {
-        True -> column
-        False -> "NULL"
-      }
-    })
-  echo sql_select_fields
-  echo query.state.where_clauses
-
-  let q =
-    pog.query("select id, NULL, NULL from users")
+  let pog_query =
+    pog.query(sql_query)
     |> pog.returning(partial_user_decoder(query.state.selected_fields))
+
+  let final_query = case parameters {
+    [] -> pog_query
+    params -> {
+      params
+      |> list.fold(pog_query, fn(query_acc, param) {
+        pog.parameter(query_acc, param)
+      })
+    }
+  }
 
   case start_database() {
     Ok(db) -> {
-      echo q
-      case pog.execute(q, db) {
-        Ok(res) -> {
-          Ok(res.rows)
-        }
-        Error(_) -> {
-          todo
+      case pog.execute(final_query, db) {
+        Ok(result) -> Ok(result.rows)
+        Error(error) -> {
+          io.println_error("Query execution failed")
+          echo error
+          Error(QueryExecutionError)
         }
       }
     }
-    _ -> {
-      todo
+    Error(_) -> {
+      Error(DatabaseConnectionError)
     }
   }
 }
 
 pub fn example_dev() {
-  let res =
+  let query =
     select([UserId, UserBio])
     |> where_username("Hello")
-    |> where_username("Overriden")
-    |> execute()
+    |> where_username("user1")
+    |> order_by(UserId, Desc)
+    |> limit(10)
 
-  case res {
-    Ok(users) -> {
-      users
-      |> list.each(fn(user) {
-        case user.bio {
-          NotFetched -> {
-            echo "value was not fetched"
-          }
-          Null -> {
-            echo "value was null"
-          }
-          Value(bio) -> {
-            echo bio
-            todo as "bio return"
-          }
-        }
+  let #(sql_query, parameters) = build_complete_sql_query(query.state)
+
+  io.println("=== Generated SQL Query ===")
+  io.println(sql_query)
+  io.println("\n=== Parameters ===")
+  parameters
+  |> list.each(fn(param) { io.println("Parameter: " <> string.inspect(param)) })
+
+  io.println("\n=== Query State ===")
+  io.println("Selected fields: " <> string.inspect(query.state.selected_fields))
+  io.println("Where clauses: " <> string.inspect(query.state.where_clauses))
+  io.println("Order by: " <> string.inspect(query.state.order_by))
+  io.println("Limit: " <> string.inspect(query.state.limit))
+
+  // Now let's actually try to execute the query
+  io.println("\n=== Attempting to execute query ===")
+
+  let pog_query =
+    pog.query(sql_query)
+    |> pog.returning(partial_user_decoder(query.state.selected_fields))
+
+  let final_query = case parameters {
+    [] -> pog_query
+    params -> {
+      params
+      |> list.fold(pog_query, fn(query_acc, param) {
+        pog.parameter(query_acc, param)
       })
     }
-    _ -> {
-      todo
+  }
+
+  io.println("Final pog query object:")
+  echo final_query
+
+  let res = execute(query)
+  case res {
+    Ok(users) -> {
+      io.println("\n=== Query Results ===")
+      io.println("Found " <> int.to_string(list.length(users)) <> " users")
+      users
+      |> list.each(fn(user) {
+        io.println("User ID: " <> string.inspect(user.id))
+        io.println("User Username: " <> string.inspect(user.username))
+        case user.bio {
+          NotFetched -> io.println("Bio: Not fetched")
+          Null -> io.println("Bio: NULL")
+          Value(Some(bio_text)) -> io.println("Bio: " <> bio_text)
+          Value(None) -> io.println("Bio: Empty")
+        }
+        io.println("---")
+      })
+    }
+    Error(err) -> {
+      io.println("\n=== Query Error ===")
+      echo err
+      Nil
     }
   }
 }
