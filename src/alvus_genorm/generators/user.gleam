@@ -1,8 +1,9 @@
-import gleam/option.{type Option}
 import gleam/list
+import gleam/option.{type Option}
 
 // Types that would be imported/generated
 pub type Post
+
 pub type Error
 
 /// Type for full users with optional relationships loaded
@@ -12,7 +13,7 @@ pub type UserWithRelationships {
     username: String,
     bio: Option(String),
     // Relationships - None if not queried, Some(data) if loaded
-    posts: Option(List(Post))
+    posts: Option(List(Post)),
   )
 }
 
@@ -20,9 +21,10 @@ pub type UserWithRelationships {
 pub type UserQueryState {
   UserQueryState(
     where_clauses: List(UserWhereClause),
-    relationships: List(String), // ["posts"] - relationship names to load
+    relationships: List(String),
+    // ["posts"] - relationship names to load
     order_by: List(UserOrderClause),
-    limit: Option(Int)
+    limit: Option(Int),
   )
 }
 
@@ -58,7 +60,7 @@ pub fn all() -> UserQuery {
     where_clauses: [],
     relationships: [],
     order_by: [],
-    limit: option.None
+    limit: option.None,
   ))
 }
 
@@ -67,28 +69,31 @@ pub fn all() -> UserQuery {
 /// Add where clause for id field
 pub fn where_id(query: UserQuery, id: Int) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    where_clauses: [WhereId(id), ..state.where_clauses]
-  ))
+  UserQuery(
+    UserQueryState(..state, where_clauses: [WhereId(id), ..state.where_clauses]),
+  )
 }
 
 /// Add where clause for username field
 pub fn where_username(query: UserQuery, username: String) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    where_clauses: [WhereUsername(username), ..state.where_clauses]
-  ))
+  UserQuery(
+    UserQueryState(..state, where_clauses: [
+      WhereUsername(username),
+      ..state.where_clauses
+    ]),
+  )
 }
 
 /// Add where clause for bio field
 pub fn where_bio(query: UserQuery, bio: Option(String)) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    where_clauses: [WhereBio(bio), ..state.where_clauses]
-  ))
+  UserQuery(
+    UserQueryState(..state, where_clauses: [
+      WhereBio(bio),
+      ..state.where_clauses
+    ]),
+  )
 }
 
 // ============ RELATIONSHIP LOADERS ============
@@ -96,46 +101,42 @@ pub fn where_bio(query: UserQuery, bio: Option(String)) -> UserQuery {
 /// Load posts relationship
 pub fn with_posts(query: UserQuery) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    relationships: ["posts", ..state.relationships]
-  ))
+  UserQuery(
+    UserQueryState(..state, relationships: ["posts", ..state.relationships]),
+  )
 }
 
 // ============ ORDER BY BUILDERS ============
 
 pub fn order_by_id(query: UserQuery, direction: Direction) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    order_by: [OrderById(direction), ..state.order_by]
-  ))
+  UserQuery(
+    UserQueryState(..state, order_by: [OrderById(direction), ..state.order_by]),
+  )
 }
 
 pub fn order_by_username(query: UserQuery, direction: Direction) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    order_by: [OrderByUsername(direction), ..state.order_by]
-  ))
+  UserQuery(
+    UserQueryState(..state, order_by: [
+      OrderByUsername(direction),
+      ..state.order_by
+    ]),
+  )
 }
 
 pub fn order_by_bio(query: UserQuery, direction: Direction) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    order_by: [OrderByBio(direction), ..state.order_by]
-  ))
+  UserQuery(
+    UserQueryState(..state, order_by: [OrderByBio(direction), ..state.order_by]),
+  )
 }
 
 // ============ LIMIT BUILDERS ============
 
 pub fn limit(query: UserQuery, count: Int) -> UserQuery {
   let UserQuery(state) = query
-  UserQuery(UserQueryState(
-    ..state,
-    limit: option.Some(count)
-  ))
+  UserQuery(UserQueryState(..state, limit: option.Some(count)))
 }
 
 // ============ EXECUTION FUNCTIONS ============
@@ -156,9 +157,9 @@ pub type PaginatedUserResult {
   PaginatedUserResult(
     data: List(UserWithRelationships),
     total_count: Int,
-    page: Int, 
+    page: Int,
     per_page: Int,
-    has_next: Bool
+    has_next: Bool,
   )
 }
 
@@ -167,7 +168,9 @@ pub fn with_pagination(query: UserQuery, page: Int, per_page: Int) -> UserQuery 
   todo
 }
 
-pub fn execute_with_pagination(query: UserQuery) -> Result(PaginatedUserResult, Error) {
+pub fn execute_with_pagination(
+  query: UserQuery,
+) -> Result(PaginatedUserResult, Error) {
   // TODO: Execute with LIMIT/OFFSET and separate COUNT query
   todo
 }
