@@ -16,20 +16,17 @@ const user_schema = schema.Model(
     schema.Field(
       column_name: "id",
       attributes: [schema.PrimaryKey],
-      field_type: schema.Serial,
-      validation_rules: [],
+      field_type: schema.Serial([]),
     ),
     schema.Field(
       column_name: "username",
       attributes: [schema.PrimaryKey],
-      field_type: schema.Text(50),
-      validation_rules: [schema.MaxLength(50), schema.MinLength(4)],
+      field_type: schema.Text(50, []),
     ),
     schema.Field(
       column_name: "bio",
       attributes: [schema.Nullable],
-      field_type: schema.Text(1400),
-      validation_rules: [schema.MaxLength(1400)],
+      field_type: schema.Text(1400, []),
     ),
   ],
 )

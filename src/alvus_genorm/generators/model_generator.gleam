@@ -19,17 +19,15 @@ pub fn dev_example() {
       fields: [
         schema.Field(
           column_name: "id",
-          field_type: schema.UUID,
+          field_type: schema.UUID([]),
           attributes: [
             schema.Indexed,
           ],
-          validation_rules: [],
         ),
         schema.Field(
           column_name: "bio_entry",
-          field_type: schema.Text(1200),
+          field_type: schema.Text(1200, []),
           attributes: [],
-          validation_rules: [],
         ),
       ],
       relationships: [],

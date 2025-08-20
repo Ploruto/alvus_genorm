@@ -1,4 +1,16 @@
-import gleam/set.{type Set}
+import alvus_genorm/schema/validation/array_validation.{type ArrayValidation}
+import alvus_genorm/schema/validation/binary_validation.{type BinaryValidation}
+import alvus_genorm/schema/validation/boolean_validation.{type BooleanValidation}
+import alvus_genorm/schema/validation/date_validation.{type DateValidation}
+import alvus_genorm/schema/validation/datetime_validation.{type DateTimeValidation}
+import alvus_genorm/schema/validation/decimal_validation.{type DecimalValidation}
+import alvus_genorm/schema/validation/enum_validation.{type EnumValidation}
+import alvus_genorm/schema/validation/float_validation.{type FloatValidation}
+import alvus_genorm/schema/validation/int_validation.{type IntValidation}
+import alvus_genorm/schema/validation/json_validation.{type JsonValidation}
+import alvus_genorm/schema/validation/text_validation.{type TextValidation}
+import alvus_genorm/schema/validation/time_validation.{type TimeValidation}
+import alvus_genorm/schema/validation/uuid_validation.{type UuidValidation}
 
 /// Represents a database model with its table name, fields, and relationships.
 /// This is the main type used to define the structure of a database table
@@ -20,40 +32,45 @@ pub type Field {
     column_name: String,
     field_type: FieldType,
     attributes: List(FieldAttributes),
-    validation_rules: List(ValidationRule),
   )
 }
 
 /// Attributes that can be applied to database fields.
-/// These control database-level constraints and optimizations.
+/// These control DATABASE-LEVEL constraints, defaults, and optimizations.
+/// These are separate from validation rules which handle APPLICATION-LEVEL validation.
 pub type FieldAttributes {
+  /// Marks this field as the primary key
   PrimaryKey
-  /// Ensures the field value is unique across all rows in the table
+  /// Ensures the field value is unique across all rows in the table (UNIQUE constraint)
   Unique
   /// Creates a database index on this field for faster queries
   Indexed
-  /// Automatically generates a UUID value when inserting new records
+  /// Automatically generates a UUID value when inserting new records (database-level default)
   AutoUUID
-  /// Indicates this field references another table's primary key
+  /// Indicates this field references another table's primary key (FOREIGN KEY constraint)
   ForeignKey
-  /// Allows the field to contain NULL values
+  /// Allows the field to contain NULL values (database-level nullability)
   Nullable
+  /// Sets a default value at the database level (e.g., DEFAULT 'active', DEFAULT NOW())
+  DefaultValue(String)
+  /// Auto-increment field (for non-Serial fields that need auto-increment)
+  AutoIncrement
+  /// Database check constraint (e.g., CHECK (age > 0))
+  CheckConstraint(String)
+  /// Foreign key cascade behavior on delete
+  CascadeDelete
+  /// Foreign key cascade behavior on update
+  CascadeUpdate
+  /// Set foreign key to NULL on delete
+  SetNullOnDelete
+  /// Set foreign key to NULL on update
+  SetNullOnUpdate
+  /// Specify collation for text fields (e.g., 'en_US.UTF-8')
+  Collation(String)
+  /// Generated/computed column
+  Generated
 }
 
-/// Validation rules that can be applied to fields.
-/// These are used during code generation to create type-safe validation functions.
-pub type ValidationRule {
-  /// Validates that the field contains a valid email address
-  Email
-  /// Ensures the field has at least the specified number of characters
-  MinLength(Int)
-  /// Ensures the field has at most the specified number of characters
-  MaxLength(Int)
-  /// Ensures numeric fields are at least the specified value
-  Min(Int)
-  /// Ensures numeric fields are at most the specified value
-  Max(Int)
-}
 
 /// Database field types that map to both SQL types and Gleam types.
 /// Used during code generation to create the appropriate type annotations.
