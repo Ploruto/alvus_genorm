@@ -57,17 +57,46 @@ pub type ValidationRule {
 
 /// Database field types that map to both SQL types and Gleam types.
 /// Used during code generation to create the appropriate type annotations.
+/// Each type embeds its own validation rules for type safety.
 pub type FieldType {
-  /// 32-bit integer
-  Int
-  /// 64-bit integer
-  BigInt
+  /// 32-bit integer with numeric validations
+  Int(validations: List(IntValidation))
+  /// 64-bit integer with numeric validations
+  BigInt(validations: List(IntValidation))
   /// Auto-incrementing integer (typically for primary keys)
-  Serial
+  Serial(validations: List(IntValidation))
   /// Universally unique identifier
-  UUID
-  /// Variable-length text with maximum length
-  Text(Int)
+  UUID(validations: List(UuidValidation))
+  /// Variable-length text with maximum length and text validations
+  Text(max_length: Int, validations: List(TextValidation))
+  /// Fixed-length text with exact character count
+  Char(length: Int, validations: List(TextValidation))
+  /// Boolean field with boolean validations
+  Boolean(validations: List(BooleanValidation))
+  /// 32-bit floating point number
+  Float(validations: List(FloatValidation))
+  /// 64-bit floating point number
+  Double(validations: List(FloatValidation))
+  /// Fixed precision decimal for monetary values - DECIMAL(precision, scale)
+  Decimal(precision: Int, scale: Int, validations: List(DecimalValidation))
+  /// Date only (no time component)
+  Date(validations: List(DateValidation))
+  /// Time only (no date component)
+  Time(validations: List(TimeValidation))
+  /// Date and time without timezone
+  DateTime(validations: List(DateTimeValidation))
+  /// Date and time with timezone (PostgreSQL TIMESTAMPTZ)
+  DateTimeWithTimezone(validations: List(DateTimeValidation))
+  /// JSON data (PostgreSQL JSON type)
+  Json(validations: List(JsonValidation))
+  /// Binary JSON data (PostgreSQL JSONB type)
+  JsonB(validations: List(JsonValidation))
+  /// Array of another field type
+  Array(element_type: FieldType, validations: List(ArrayValidation))
+  /// Enumeration with predefined values
+  Enum(values: List(String), validations: List(EnumValidation))
+  /// Binary data (PostgreSQL BYTEA)
+  Binary(validations: List(BinaryValidation))
 }
 
 /// Defines relationships between database tables.
