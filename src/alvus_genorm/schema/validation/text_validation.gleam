@@ -43,7 +43,10 @@ pub type TextValidationError {
 }
 
 /// Validate a string value against a text validation rule
-pub fn validate(value: String, rule: TextValidation) -> Result(String, TextValidationError) {
+pub fn validate(
+  value: String,
+  rule: TextValidation,
+) -> Result(String, TextValidationError) {
   case rule {
     Required -> {
       case string.trim(value) {
@@ -55,7 +58,8 @@ pub fn validate(value: String, rule: TextValidation) -> Result(String, TextValid
       let actual = string.length(value)
       case actual >= min {
         True -> Ok(value)
-        False -> Error(MinLengthError(required: min, actual: actual, value: value))
+        False ->
+          Error(MinLengthError(required: min, actual: actual, value: value))
       }
     }
     MaxLength(max) -> {
@@ -111,8 +115,11 @@ pub fn validate(value: String, rule: TextValidation) -> Result(String, TextValid
 }
 
 /// Validate a string against multiple text validation rules
-pub fn validate_all(value: String, rules: List(TextValidation)) -> Result(String, List(TextValidationError)) {
-  let errors = 
+pub fn validate_all(
+  value: String,
+  rules: List(TextValidation),
+) -> Result(String, List(TextValidationError)) {
+  let errors =
     rules
     |> list.filter_map(fn(rule) {
       case validate(value, rule) {
@@ -120,7 +127,7 @@ pub fn validate_all(value: String, rules: List(TextValidation)) -> Result(String
         Error(err) -> Ok(err)
       }
     })
-  
+
   case errors {
     [] -> Ok(value)
     _ -> Error(errors)
